@@ -51,6 +51,8 @@ let hasGridRun = false;
 let hasSineRun = false;
 let rx, ry, rz;
 let rotCray = false;
+let autoAnimate = false; // Auto-cycle modes/rotation without audio
+let autoSpeed = 10;      // Higher = faster auto-cycling (1-20)
 
 // Global variables
 let avx = 0.0;
@@ -145,6 +147,18 @@ function draw() {
   // Auto-switch modes based on audio
   if (filteredSignal[3] > 1 && frameCount % 300 == 0) {
     switchIt();
+  }
+
+  // Auto animate: keep visuals evolving regardless of audio input.
+  // autoSpeed (1-20) scales the cycle rate; higher = faster.
+  if (autoAnimate) {
+    let interval = Math.max(4, Math.round(150 / autoSpeed));
+    if (frameCount % interval == 0) {
+      switchIt();
+    }
+    if (frameCount % (interval * 4) == 0) {
+      rotCray = !rotCray;
+    }
   }
   
   // Show debug info if enabled
@@ -434,6 +448,11 @@ function keyPressed() {
   }
   if (key === 'r') {
     rotCray = !rotCray;
+  }
+  if (key === 't') {
+    autoAnimate = !autoAnimate;
+    console.log("Auto animate:", autoAnimate ? "ON" : "OFF");
+    if (typeof syncAutoAnimateButton === 'function') syncAutoAnimateButton();
   }
   if (key === 'd') {
     showDebug = !showDebug;
