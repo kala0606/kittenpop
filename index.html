@@ -71,6 +71,23 @@
             color: #666;
             cursor: not-allowed;
         }
+
+        select {
+            background: #333;
+            color: white;
+            border: 1px solid #666;
+            padding: 6px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            width: 100%;
+            cursor: pointer;
+        }
+
+        select:disabled {
+            background: #222;
+            color: #666;
+            cursor: not-allowed;
+        }
         
         .status-indicator {
             display: inline-block;
@@ -110,6 +127,12 @@
             <span id="micStatus">Microphone: OFF</span>
         </div>
         <div class="control-item">
+            <label for="inputSelect" style="display:block; margin-bottom:3px;">Audio Input:</label>
+            <select id="inputSelect" disabled>
+                <option value="">Default (mic)</option>
+            </select>
+        </div>
+        <div class="control-item">
             <button id="startBtn">Start Audio</button>
             <button id="testBtn">Test Mic</button>
         </div>
@@ -146,6 +169,7 @@
         // UI Control Script
         let startBtn = document.getElementById('startBtn');
         let testBtn = document.getElementById('testBtn');
+        let inputSelect = document.getElementById('inputSelect');
         let micStatus = document.getElementById('micStatus');
         let micIndicator = document.getElementById('micIndicator');
         let currentModeDisplay = document.getElementById('currentMode');
@@ -155,7 +179,65 @@
         
         let lastFrameTime = 0;
         let frameCounter = 0;
-        
+
+        // Populate the audio input dropdown with available devices.
+        // Device labels are only exposed by the browser after mic permission
+        // has been granted, so this is called after the mic starts.
+        async function populateInputSources() {
+            if (typeof mic === 'undefined' || !mic) return;
+            try {
+                const sources = await mic.getSources();
+                const currentIndex = (typeof mic.currentSource === 'number') ? mic.currentSource : 0;
+
+                inputSelect.innerHTML = '';
+                sources.forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = device.label || ('Input ' + (index + 1));
+                    if (index === currentIndex) option.selected = true;
+                    inputSelect.appendChild(option);
+                });
+
+                if (sources.length === 0) {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'No inputs found';
+                    inputSelect.appendChild(option);
+                    inputSelect.disabled = true;
+                } else {
+                    inputSelect.disabled = false;
+                }
+            } catch (error) {
+                console.error('Error listing audio inputs:', error);
+            }
+        }
+
+        // Switch the mic to the selected input device.
+        inputSelect.addEventListener('change', async function() {
+            const index = parseInt(this.value, 10);
+            if (isNaN(index) || typeof mic === 'undefined' || !mic) return;
+
+            try {
+                if (typeof getAudioContext === 'function') {
+                    await getAudioContext().resume();
+                }
+                mic.stop();
+                // setSource selects the device by its index in getSources()
+                mic.setSource(index);
+                mic.start(() => {
+                    console.log('Switched audio input to index ' + index);
+                    micStatus.textContent = 'Microphone: ON';
+                    micIndicator.className = 'status-indicator status-green';
+                }, (err) => {
+                    console.error('Failed to switch input:', err);
+                    micStatus.textContent = 'Microphone: FAILED';
+                    micIndicator.className = 'status-indicator status-red';
+                });
+            } catch (error) {
+                console.error('Error switching audio input:', error);
+            }
+        });
+
         startBtn.addEventListener('click', async function() {
             try {
                 console.log('Starting audio...');
@@ -179,6 +261,7 @@
                             startBtn.textContent = 'Audio Started';
                             startBtn.disabled = true;
                             console.log('Microphone successfully started');
+                            populateInputSources();
                         } else {
                             micStatus.textContent = 'Microphone: FAILED';
                             micIndicator.className = 'status-indicator status-red';
@@ -213,7 +296,7 @@
                         
                         // Now try to start the p5.js microphone
                         if (typeof mic !== 'undefined' && mic) {
-                            mic.start();
+                            mic.start(populateInputSources);
                         }
                     })
                     .catch(function(error) {
