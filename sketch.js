@@ -123,7 +123,14 @@ function draw() {
   // Audio analysis
   updateAudioData();
   updateFilteredSignal();
-  
+
+  // When auto-animating with no live audio, synthesize a fake beat so the
+  // visuals actually pulse and move (ds, avx and per-band motion all read
+  // from filteredSignal). autoSpeed scales the tempo.
+  if (autoAnimate) {
+    applyFakeSignal();
+  }
+
   // Map audio signal to dynamic size
   ds = map(filteredSignal[3], 0, 50, 0.5, 3.0);
   ds = constrain(ds, 0.3, 4.0); // Prevent elements from getting too small or large
@@ -149,14 +156,14 @@ function draw() {
     switchIt();
   }
 
-  // Auto animate: keep visuals evolving regardless of audio input.
-  // autoSpeed (1-20) scales the cycle rate; higher = faster.
+  // Auto animate: occasionally switch scenes. Motion comes from the fake
+  // signal above; keep scene changes fairly infrequent so things can move.
   if (autoAnimate) {
-    let interval = Math.max(4, Math.round(150 / autoSpeed));
-    if (frameCount % interval == 0) {
+    let sceneInterval = Math.max(60, Math.round(1200 / autoSpeed));
+    if (frameCount % sceneInterval == 0) {
       switchIt();
     }
-    if (frameCount % (interval * 4) == 0) {
+    if (frameCount % (sceneInterval * 3) == 0) {
       rotCray = !rotCray;
     }
   }
@@ -390,6 +397,24 @@ function updateFilteredSignal() {
     
     let sum = filterBuffer[i].reduce((a, b) => a + b, 0);
     filteredSignal[i] = sum / filterBuffer[i].length;
+  }
+}
+
+function applyFakeSignal() {
+  // Tempo scales with autoSpeed (1-20). t advances faster at higher speed.
+  let t = frameCount * 0.04 * (autoSpeed / 6.0);
+
+  // Peaky "kick" envelope (0..1) plus a slower swelling wobble.
+  let kick = Math.pow((Math.sin(t) * 0.5 + 0.5), 5);
+  let wobble = noise(frameCount * 0.015);
+
+  // Overall energy in roughly the 0..50 range the visuals expect.
+  let level = kick * 42 + wobble * 12;
+
+  // Spread across bands with a little per-band variation so it's not uniform.
+  for (let i = 0; i < audioRange; i++) {
+    let bandVar = 0.55 + 0.45 * noise(i * 5.3, frameCount * 0.02);
+    filteredSignal[i] = level * bandVar;
   }
 }
 
